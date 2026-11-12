@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Co-op RPG Arena</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #0f0f17;
+            color: #f8f8f2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* TELA DE PREPARAÇÃO */
+        #setupScreen {
+            background-color: #1e1e2e;
+            padding: 35px;
+            border-radius: 14px;
+            border: 2px solid #bd93f9;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            width: 380px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+
+        #setupScreen h1 {
+            text-align: center;
+            color: #ff79c6;
+            font-size: 26px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-group label {
+            font-weight: bold;
+            font-size: 14px;
+            color: #ffb86c;
+        }
+
+        .input-group input {
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #44475a;
+            background-color: #282a36;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: #50fa7b;
+        }
+
+        .start-btn {
+            margin-top: 10px;
+            padding: 14px;
+            background-color: #50fa7b;
+            color: #121212;
+            font-weight: bold;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .start-btn:hover {
+            background-color: #69ff94;
+            transform: scale(1.02);
+        }
+
+        /* TELA DO JOGO */
+        #gameScreen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 820px;
+            background-color: #181825;
+            border: 3px solid #44475a;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #1e1e2e 70%, #282a36 70%);
+        }
+
+        /* CAIXA DE COMANDOS INFERIOR (ESTILO RPG CLÁSSICO) */
+        #battleUI {
+            width: 100%;
+            background-color: #11111b;
+            border-top: 3px solid #6272a4;
+            padding: 15px 20px;
+            min-height: 155px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        #dialogueBox {
+            font-size: 17px;
+            color: #f8f8f2;
+            margin-bottom: 12px;
+            min-height: 26px;
+            font-weight: 500;
+        }
+
+        #actionButtons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .cmd-btn {
+            background-color: #282a36;
+            color: #f8f8f2;
+            border: 2px solid #6272a4;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.15s;
+        }
+
+        .cmd-btn:hover:not(:disabled) {
+            background-color: #bd93f9;
+            color: #121212;
+            border-color: #bd93f9;
+        }
+
+        .cmd-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .cmd-back {
+            border-color: #ff5555;
+            color: #ff5555;
+        }
+
+        .cmd-back:hover {
+            background-color: #ff5555 !important;
+            color: white !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. TELA DE PREPARAÇÃO -->
+    <div id="setupScreen">
+        <h1>Prepare seus Heróis</h1>
+        <div class="input-group">
+            <label for="p1Input">Nome do Guerreiro (P1):</label>
+            <input type="text" id="p1Input" placeholder="Ex: Rinni">
+        </div>
+        <div class="input-group">
+            <label for="p2Input">Nome do Suporte (P2):</label>
+            <input type="text" id="p2Input" placeholder="Ex: Cat">
+        </div>
+        <button class="start-btn" onclick="iniciarJogo()">Iniciar Batalha!</button>
+    </div>
+
+    <!-- 2. TELA DO JOGO -->
+    <div id="gameScreen">
+        <canvas id="gameCanvas" width="820" height="380"></canvas>
+        <div id="battleUI">
+            <div id="dialogueBox">Batalha iniciada!</div>
+            <div id="actionButtons"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const dialogueBox = document.getElementById("dialogueBox");
+        const actionButtons = document.getElementById("actionButtons");
+
+        // ESTADO DO JOGO (Baseado no seu coop.py)
+        let turns = 1;
+        let skipEnemy = false;
+        let enemyOnFire = 0;
+        let enemyDistress = 0;
+        let atkDebuff = 0;
+        let defDebuff = 0;
+        let ragedEnemy = false;
+
+        // Invocações
+        let wolfTurns = 0;
+        let rabbitTurns = 0;
+
+        // Jogador 1 (Guerreiro)
+        let p1 = {
+            name: "Guerreiro",
+            hp: 100, maxHp: 100,
+            sp: 30, maxSp: 30,
+            atkBonus: 0, defBonus: 0,
+            fireTurns: 0, skip: false,
+            block: false, motivateAtk: false, motivateDef: false,
+            charge: false, abilityCharge: false,
+            lifeSteal: false, ultUnlocked: false, ultCharge: 0,
+            x: 160, y: 170, color: "#ff5555", offsetX: 0
+        };
+
+        // Jogador 2 (Suporte)
+        let p2 = {
+            name: "Suporte",
+            hp: 80, maxHp: 80,
+            sp: 60, maxSp: 60,
+            heal: 20, magBonus: 0, defBonus: 0,
+            fireTurns: 0, skip: false,
+            motivateAtk: false, motivateDef: false,
+            parryUnlocked: false, parryActive: false,
+            summonUnlocked: false, ultUnlocked: false, ultCharge: 0,
+            x: 110, y: 245, color: "#8be9fd", offsetX: 0
+        };
+
+        // Inimigo
+        let enemy = {
+            name: "Boss Sombrio",
+            hp: 425, maxHp: 425,
+            x: 580, y: 165, size: 95,
+            color: "#bd93f9", offsetX: 0
+        };
+
+        // Efeitos visuais flutuantes (números de dano/cura)
+        let floatingTexts = [];
+
+        function addFloatingText(text, x, y, color) {
+            floatingTexts.push({ text, x, y, color, alpha: 1.0 });
+        }
+
+        function rand(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function iniciarJogo() {
+            const n1 = document.getElementById("p1Input").value.trim();
+            const n2 = document.getElementById("p2Input").value.trim();
+            if (n1) p1.name = n1;
+            if (n2) p2.name = n2;
+
+            document.getElementById("setupScreen").style.display = "none";
+            document.getElementById("gameScreen").style.display = "flex";
+
+            requestAnimationFrame(gameLoop);
+            iniciarTurno();
+        }
+
+        // LOOP DE RENDERIZAÇÃO DO CANVAS (60 FPS)
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Suaviza animações de avanço
+            p1.offsetX *= 0.85;
+            p2.offsetX *= 0.85;
+            enemy.offsetX *= 0.85;
+
+            // 1. Cabeçalho de Turno
+            ctx.fillStyle = "#f1fa8c";
+            ctx.font = "bold 18px sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText(`TURNO ${turns}`, 20, 32);
+
+            // 2. Desenhar Invocações (Placeholders menores)
+            if (wolfTurns > 0) {
+                ctx.fillStyle = "#ffb86c";
+                ctx.fillRect(250, 150, 30, 30);
+                ctx.fillStyle = "white";
+                ctx.font = "12px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(`Lobo (${wolfTurns}t)`, 265, 143);
+            }
+            if (rabbitTurns > 0) {
+                ctx.fillStyle = "#ff79c6";
+                ctx.fillRect(230, 260, 26, 26);
+                ctx.fillStyle = "white";
+                ctx.font = "12px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(`Coelho (${rabbitTurns}t)`, 243, 253);
+            }
+
+            // 3. Desenhar Jogador 1 (Quadrado Placeholder)
+            if (p1.hp > 0) {
+                desenharEntidade(p1.x + p1.offsetX, p1.y, 48, p1.color, p1.name, p1.hp, p1.maxHp, p1.sp, p1.maxSp);
+                // Indicadores de Buff/Status
+                let statusP1 = [];
+                if (p1.block) statusP1.push("🛡️Block");
+                if (p1.motivateAtk) statusP1.push("⚔️Motivated");
+                if (p1.abilityCharge) statusP1.push("⚡Charged");
+                if (p1.fireTurns > 0) statusP1.push("🔥Burn");
+                if (p1.skip) statusP1.push("❄️Frozen");
+                desenharStatus(statusP1.join(" "), p1.x + 24, p1.y - 38);
+            }
+
+            // 4. Desenhar Jogador 2 (Quadrado Placeholder)
+            if (p2.hp > 0) {
+                desenharEntidade(p2.x + p2.offsetX, p2.y, 48, p2.color, p2.name, p2.hp, p2.maxHp, p2.sp, p2.maxSp);
+                let statusP2 = [];
+                if (p2.parryActive) statusP2.push("🔰Parry");
+                if (p2.motivateAtk) statusP2.push("⚔️Motivated");
+                if (p2.fireTurns > 0) statusP2.push("🔥Burn");
+                if (p2.skip) statusP2.push("❄️Frozen");
+                desenharStatus(statusP2.join(" "), p2.x + 24, p2.y - 38);
+            }
+
+            // 5. Desenhar Inimigo (Quadrado Placeholder Maior)
+            if (enemy.hp > 0) {
+                let eColor = ragedEnemy ? "#ff2a6d" : enemy.color;
+                desenharEntidade(enemy.x + enemy.offsetX, enemy.y, enemy.size, eColor, ragedEnemy ? "BOSS FURIOSO" : enemy.name, enemy.hp, enemy.maxHp, null, null);
+                let statusE = [];
+                if (enemyOnFire > 0) statusE.push("🔥Burn");
+                if (enemyDistress > 0) statusE.push("😵Distress");
+                if (atkDebuff > 0) statusE.push("⬇️ATK");
+                if (defDebuff > 0) statusE.push("⬇️DEF");
+                if (skipEnemy) statusE.push("💫Derrubado");
+                desenharStatus(statusE.join(" "), enemy.x + enemy.size / 2, enemy.y - 38);
+            }
+
+            // 6. Textos Flutuantes de Dano/Cura
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                let ft = floatingTexts[i];
+                ctx.fillStyle = ft.color;
+                ctx.globalAlpha = ft.alpha;
+                ctx.font = "bold 20px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.globalAlpha = 1.0;
+                ft.y -= 0.8;
+                ft.alpha -= 0.018;
+                if (ft.alpha <= 0) floatingTexts.splice(i, 1);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function desenharEntidade(x, y, size, color, name, hp, maxHp, sp, maxSp) {
+            // Sombra
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            ctx.fillRect(x + 4, y + size - 4, size, 8);
+
+            // Quadrado Placeholder
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, size, size);
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, size, size);
+
+            // Nome
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 14px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(name, x + size / 2, y - 22);
+
+            // Barra de HP
+            const barW = Math.max(size + 20, 70);
+            const barX = x + size / 2 - barW / 2;
+            ctx.fillStyle = "#44475a";
+            ctx.fillRect(barX, y - 16, barW, 7);
+            ctx.fillStyle = "#50fa7b";
+            ctx.fillRect(barX, y - 16, barW * Math.max(0, hp / maxHp), 7);
+
+            // Texto numérico de HP/SP abaixo do quadrado
+            ctx.fillStyle = "#f8f8f2";
+            ctx.font = "12px sans-serif";
+            if (sp !== null) {
+                ctx.fillText(`HP: ${Math.max(0, hp)}/${maxHp} | SP: ${sp}/${maxSp}`, x + size / 2, y + size + 16);
+            } else {
+                ctx.fillText(`HP: ${Math.max(0, hp)}/${maxHp}`, x + size / 2, y + size + 16);
+            }
+        }
+
+        function desenharStatus(text, x, y) {
+            if (!text) return;
+            ctx.fillStyle = "#ffb86c";
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(text, x, y);
+        }
+
+        // FLUXO DE TURNOS
+        function setMessage(msg, buttons = []) {
+            dialogueBox.innerText = msg;
+            actionButtons.innerHTML = "";
+            buttons.forEach(b => {
+                const btn = document.createElement("button");
+                btn.innerText = b.label;
+                btn.className = "cmd-btn" + (b.back ? " cmd-back" : "");
+                if (b.disabled) btn.disabled = true;
+                btn.onclick = b.action;
+                actionButtons.appendChild(btn);
+            });
+        }
+
+        function iniciarTurno() {
+            if (verificarFimDeJogo()) return;
+
+            // Efeito do Coelho
+            if (rabbitTurns > 0) {
+                if (p1.hp > 0) { p1.hp = Math.min(p1.maxHp, p1.hp + 10); addFloatingText("+10 HP", p1.x + 24, p1.y, "#50fa7b"); }
+                if (p2.hp > 0) { p2.hp = Math.min(p2.maxHp, p2.hp + 10); addFloatingText("+10 HP", p2.x + 24, p2.y, "#50fa7b"); }
+                rabbitTurns--;
+            }
+
+            // Efeito de Queimadura nos jogadores
+            if (p1.fireTurns > 0 && p1.hp > 0) {
+                p1.hp -= 10; p1.fireTurns--;
+                addFloatingText("-10 🔥", p1.x + 24, p1.y, "#ff5555");
+            }
+            if (p2.fireTurns > 0 && p2.hp > 0) {
+                p2.hp -= 10; p2.fireTurns--;
+                addFloatingText("-10 🔥", p2.x + 24, p2.y, "#ff5555");
+            }
+
+            if (verificarFimDeJogo()) return;
+
+            // A cada 3 turnos: Cartas de Upgrade!
+            if (turns % 3 === 0) {
+                if (p1.hp > 0) mostrarUpgradesP1();
+                else if (p2.hp > 0) mostrarUpgradesP2();
+            } else {
+                vezDoP1();
+            }
+        }
+
+        // CARTAS DE UPGRADE (P1 e P2)
+        function mostrarUpgradesP1() {
+            let opts = [
+                { label: "ATK++ (+3 ATK & +5 SP)", action: () => { p1.atkBonus += 3; p1.sp = Math.min(p1.maxSp, p1.sp + 5); proximoUpgrade(); } },
+                { label: "DEF++ (+2 DEF & +5 SP)", action: () => { p1.defBonus += 2; p1.sp = Math.min(p1.maxSp, p1.sp + 5); proximoUpgrade(); } },
+                { label: "HP++ (+10 Max HP & +5 SP)", action: () => { p1.maxHp += 10; p1.hp += 10; p1.sp = Math.min(p1.maxSp, p1.sp + 5); proximoUpgrade(); } }
+            ];
+            if (turns >= 6 && !p1.lifeSteal) opts.push({ label: "Desbloquear LIFE STEAL", action: () => { p1.lifeSteal = true; proximoUpgrade(); } });
+            if (turns >= 9 && !p1.charge) opts.push({ label: "Desbloquear CHARGE", action: () => { p1.charge = true; proximoUpgrade(); } });
+            if (turns >= 12 && !p1.ultUnlocked) opts.push({ label: "Desbloquear ULT", action: () => { p1.ultUnlocked = true; proximoUpgrade(); } });
+
+            setMessage(`✨ TURNO DE UPGRADE! Escolha uma melhoria para ${p1.name}:`, opts);
+        }
+
+        function proximoUpgrade() {
+            if (p2.hp > 0) mostrarUpgradesP2();
+            else vezDoP1();
+        }
+
+        function mostrarUpgradesP2() {
+            let opts = [
+                { label: "MAG++ (+4 Magia & +5 SP)", action: () => { p2.magBonus += 4; p2.sp = Math.min(p2.maxSp, p2.sp + 5); vezDoP1(); } },
+                { label: "DEF++ (+4 DEF & +5 SP)", action: () => { p2.defBonus += 4; p2.sp = Math.min(p2.maxSp, p2.sp + 5); vezDoP1(); } },
+                { label: "SP++ (+5 Max SP)", action: () => { p2.maxSp += 5; p2.sp += 5; vezDoP1(); } }
+            ];
+            if (turns >= 6 && !p2.parryUnlocked) opts.push({ label: "Desbloquear PARRY", action: () => { p2.parryUnlocked = true; vezDoP1(); } });
+            if (turns >= 9 && !p2.summonUnlocked) opts.push({ label: "Desbloquear LIVRO DE ANIMAIS", action: () => { p2.summonUnlocked = true; vezDoP1(); } });
+            if (turns >= 12 && !p2.ultUnlocked) opts.push({ label: "Desbloquear ULT", action: () => { p2.ultUnlocked = true; vezDoP1(); } });
+
+            setMessage(`✨ TURNO DE UPGRADE! Escolha uma melhoria para ${p2.name}:`, opts);
+        }
+
+        // MENU JOGADOR 1 (GUERREIRO)
+        function vezDoP1() {
+            if (verificarFimDeJogo()) return;
+            if (p1.hp <= 0) return vezDoP2();
+            if (p1.skip) {
+                p1.skip = false;
+                setMessage(`${p1.name} está congelado e perdeu o turno!`, [{ label: "Continuar", action: vezDoP2 }]);
+                return;
+            }
+
+            let btns = [
+                { label: "⚔️ Atacar", action: p1Atacar },
+                { label: "🔥 Habilidades", action: p1Habilidades },
+                { label: "🛡️ Defender (+10 SP)", action: () => {
+                    p1.sp = Math.min(p1.maxSp, p1.sp + 10);
+                    addFloatingText("+10 SP", p1.x + 24, p1.y, "#8be9fd");
+                    setMessage(`${p1.name} defendeu e recuperou 10 SP!`, [{ label: "Continuar", action: vezDoP2 }]);
+                }}
+            ];
+            if (skipEnemy && p2.hp > 0) {
+                btns.push({ label: `🔄 Trocar Turno Extra para ${p2.name}`, action: vezDoP2 });
+            }
+            setMessage(`Vez de ${p1.name} (Guerreiro) — O que fazer?`, btns);
+        }
+
+        function p1Atacar() {
+            p1.offsetX = 45;
+            let dmg = rand(6, 24) + p1.atkBonus;
+            if (p1.motivateAtk || p1.abilityCharge) { dmg *= 2; p1.motivateAtk = false; p1.abilityCharge = false; }
+            if (defDebuff > 0) dmg += 7;
+
+            let crit = rand(1, 6) === 6;
+            if (crit) {
+                dmg = Math.floor(dmg * 1.5);
+                enemy.hp -= dmg;
+                skipEnemy = true;
+                addFloatingText(`CRÍTICO! -${dmg}`, enemy.x + 45, enemy.y, "#f1fa8c");
+                setMessage(`💥 CRÍTICO! ${p1.name} causou ${dmg} de dano e derrubou o inimigo! TURNO EXTRA!`, [{ label: "Agir Novamente!", action: vezDoP1 }]);
+            } else {
+                enemy.hp -= dmg;
+                addFloatingText(`-${dmg}`, enemy.x + 45, enemy.y, "#ff5555");
+                setMessage(`${p1.name} atacou e causou ${dmg} de dano!`, [{ label: "Continuar", action: vezDoP2 }]);
+            }
+        }
+
+        function p1Habilidades() {
+            let btns = [
+                { label: "Slash (25 HP)", disabled: p1.hp <= 25, action: () => {
+                    p1.offsetX = 50;
+                    p1.hp -= 25;
+                    let dmg = rand(10, 40) + p1.atkBonus;
+                    if (p1.motivateAtk || p1.abilityCharge) { dmg *= 2; p1.motivateAtk = false; p1.abilityCharge = false; }
+                    if (defDebuff > 0) dmg += 7;
+
+                    if (rand(1, 3) === 3) {
+                        dmg = Math.floor(dmg * 1.5);
+                        enemy.hp -= dmg;
+                        skipEnemy = true;
+                        addFloatingText(`CRÍTICO! -${dmg}`, enemy.x + 45, enemy.y, "#f1fa8c");
+                        setMessage(`💥 Slash Crítico! ${dmg} de dano e derrubou o inimigo! TURNO EXTRA!`, [{ label: "Agir Novamente!", action: vezDoP1 }]);
+                    } else {
+                        enemy.hp -= dmg;
+                        addFloatingText(`-${dmg}`, enemy.x + 45, enemy.y, "#ff5555");
+                        setMessage(`${p1.name} usou Slash e deu ${dmg} de dano!`, [{ label: "Continuar", action: vezDoP2 }]);
+                    }
+                }},
+                { label: "Block (6 SP)", disabled: p1.sp < 6, action: () => {
+                    p1.sp -= 6; p1.block = true;
+                    setMessage(`${p1.name} está protegendo ${p2.name}! Absorverá 50% do dano.`, [{ label: "Continuar", action: vezDoP2 }]);
+                }},
+                { label: "Fire (8 SP)", disabled: p1.sp < 8, action: () => {
+                    p1.offsetX = 35;
+                    p1.sp -= 8;
+                    let dmg = rand(8, 32) + p1.atkBonus;
+                    if (p1.motivateAtk) { dmg *= 2; p1.motivateAtk = false; }
+                    if (defDebuff > 0) dmg += 7;
+                    enemy.hp -= dmg;
+                    addFloatingText(`-${dmg} 🔥`, enemy.x + 45, enemy.y, "#ffb86c");
+
+                    let msg = `${p1.name} lançou Fire e causou ${dmg} de dano!`;
+                    if (rand(1, 3) === 3) { enemyOnFire = 2; msg += " O inimigo pegou fogo!"; }
+                    setMessage(msg, [{ label: "Continuar", action: vezDoP2 }]);
+                }}
+            ];
+
+            if (p1.lifeSteal) {
+                btns.push({ label: "Life Steal (10 SP)", disabled: p1.sp < 10, action: () => {
+                    p1.sp -= 10; enemy.hp -= 25; p1.hp = Math.min(p1.maxHp, p1.hp + 25);
+                    addFloatingText("-25", enemy.x + 45, enemy.y, "#ff5555");
+                    addFloatingText("+25 HP", p1.x + 24, p1.y, "#50fa7b");
+                    setMessage(`${p1.name} roubou 25 HP do inimigo!`, [{ label: "Continuar", action: vezDoP2 }]);
+                }});
+            }
+            if (p1.charge) {
+                btns.push({ label: "Charge (12 SP)", disabled: p1.sp < 12, action: () => {
+                    p1.sp -= 12; p1.abilityCharge = true;
+                    setMessage(`${p1.name} carregou energia! Próximo ataque terá dano dobrado!`, [{ label: "Continuar", action: vezDoP2 }]);
+                }});
+            }
+            if (p1.ultUnlocked) {
+                btns.push({ label: `ULT (${p1.ultCharge}% - 20 SP)`, disabled: p1.sp < 20 || p1.ultCharge < 100, action: () => {
+                    p1.sp -= 20; p1.ultCharge = 0; enemy.hp -= 75; skipEnemy = true;
+                    p1.hp = Math.min(p1.maxHp, p1.hp + 15);
+                    if (p2.hp > 0) p2.hp = Math.min(p2.maxHp, p2.hp + 15);
+                    addFloatingText("-75 ULT!", enemy.x + 45, enemy.y, "#ff79c6");
+                    setMessage(`🌟 SUPREMO DE ${p1.name}! 75 de dano, inimigo atordoado e +15 HP para a equipe!`, [{ label: "Continuar", action: vezDoP2 }]);
+                }});
+            }
+
+            btns.push({ label: "Voltar", back: true, action: vezDoP1 });
+            setMessage(`Habilidades de ${p1.name}:`, btns);
+        }
+
+        // MENU JOGADOR 2 (SUPORTE)
+        function vezDoP2() {
+            if (verificarFimDeJogo()) return;
+            if (p2.hp <= 0) return turnoDoInimigo();
+            if (p2.skip) {
+                p2.skip = false;
+                setMessage(`${p2.name} está congelado e perdeu o turno!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                return;
+            }
+
+            let btns = [
+                { label: "🪄 Atacar", action: p2Atacar },
+                { label: "✨ Magia", action: p2Magia },
+                { label: "🛡️ Defender (+15 SP)", action: () => {
+                    p2.sp = Math.min(p2.maxSp, p2.sp + 15);
+                    addFloatingText("+15 SP", p2.x + 24, p2.y, "#8be9fd");
+                    setMessage(`${p2.name} defendeu e recuperou 15 SP!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }}
+            ];
+            if (p2.summonUnlocked) {
+                btns.push({ label: "🐺 Sumonar", action: p2Sumonar });
+            }
+            setMessage(`Vez de ${p2.name} (Suporte) — O que fazer?`, btns);
+        }
+
+        function p2Atacar() {
+            p2.offsetX = 45;
+            let dmg = rand(4, 16);
+            if (p2.motivateAtk) { dmg *= 2; p2.motivateAtk = false; }
+            if (defDebuff > 0) dmg += 7;
+            enemy.hp -= dmg;
+            addFloatingText(`-${dmg}`, enemy.x + 45, enemy.y, "#8be9fd");
+
+            let msg = `${p2.name} atacou e causou ${dmg} de dano!`;
+            if (rand(1, 6) === 6) { enemyDistress = 2; msg += " O inimigo ficou distressado (-ATK)!"; }
+            setMessage(msg, [{ label: "Continuar", action: turnoDoInimigo }]);
+        }
+
+        function p2Magia() {
+            let btns = [
+                { label: "Ice (9 SP)", disabled: p2.sp < 9, action: () => {
+                    p2.offsetX = 35; p2.sp -= 9;
+                    let dmg = rand(8, 36) + p2.magBonus;
+                    if (p2.motivateAtk) { dmg *= 2; p2.motivateAtk = false; }
+                    if (defDebuff > 0) dmg += 7;
+                    enemy.hp -= dmg;
+                    addFloatingText(`-${dmg} ❄️`, enemy.x + 45, enemy.y, "#8be9fd");
+                    setMessage(`${p2.name} lançou Ice e causou ${dmg} de dano!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }},
+                { label: `Pray - Curar ${p1.name} (10 SP)`, disabled: p2.sp < 10 || p1.hp <= 0, action: () => {
+                    p2.sp -= 10; let cura = p2.heal + p2.magBonus;
+                    p1.hp = Math.min(p1.maxHp, p1.hp + cura);
+                    addFloatingText(`+${cura} HP`, p1.x + 24, p1.y, "#50fa7b");
+                    setMessage(`${p2.name} curou ${p1.name} em ${cura} HP!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }},
+                { label: `Pray - Curar ${p2.name} (10 SP)`, disabled: p2.sp < 10, action: () => {
+                    p2.sp -= 10; let cura = p2.heal + p2.magBonus;
+                    p2.hp = Math.min(p2.maxHp, p2.hp + cura);
+                    addFloatingText(`+${cura} HP`, p2.x + 24, p2.y, "#50fa7b");
+                    setMessage(`${p2.name} curou a si mesmo em ${cura} HP!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }},
+                { label: `Motivate ${p1.name} (15 SP)`, disabled: p2.sp < 15 || p1.hp <= 0, action: () => {
+                    p2.sp -= 15; p1.motivateAtk = true; p1.motivateDef = true;
+                    setMessage(`${p1.name} foi motivado! ATK dobrado e DEF aumentada!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }}
+            ];
+
+            if (p2.parryUnlocked) {
+                btns.push({ label: "Parry (18 SP)", disabled: p2.sp < 18, action: () => {
+                    p2.sp -= 18; p2.parryActive = true;
+                    setMessage(`${p2.name} levantou uma barreira de Parry!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }});
+            }
+            if (p2.ultUnlocked) {
+                btns.push({ label: `ULT (${p2.ultCharge}% - 40 HP)`, disabled: p2.hp <= 40 || p2.ultCharge < 100, action: () => {
+                    p2.ultCharge = 0; p2.hp -= 40; p2.sp = p2.maxSp;
+                    enemy.hp -= 50; atkDebuff = 3; defDebuff = 3;
+                    addFloatingText("-50 ULT!", enemy.x + 45, enemy.y, "#ff79c6");
+                    setMessage(`🌟 SUPREMO DE ${p2.name}! 50 de dano, debuff no chefe e SP restaurado!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }});
+            }
+
+            btns.push({ label: "Voltar", back: true, action: vezDoP2 });
+            setMessage(`Magias de ${p2.name}:`, btns);
+        }
+
+        function p2Sumonar() {
+            setMessage("Qual animal sumonar? (Custa 20 SP)", [
+                { label: "🐺 Lobo (15 dano/turno por 3t)", disabled: p2.sp < 20 || wolfTurns > 0 || rabbitTurns > 0, action: () => {
+                    p2.sp -= 20; wolfTurns = 3;
+                    setMessage(`${p2.name} sumonou o Lobo!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }},
+                { label: "🐰 Coelho (+10 HP/turno por 3t)", disabled: p2.sp < 20 || wolfTurns > 0 || rabbitTurns > 0, action: () => {
+                    p2.sp -= 20; rabbitTurns = 3;
+                    setMessage(`${p2.name} sumonou o Coelho!`, [{ label: "Continuar", action: turnoDoInimigo }]);
+                }},
+                { label: "Voltar", back: true, action: vezDoP2 }
+            ]);
+        }
+
+        // TURNO DO INIMIGO
+        function turnoDoInimigo() {
+            if (verificarFimDeJogo()) return;
+
+            // Queimadura no inimigo
+            if (enemyOnFire > 0) {
+                enemy.hp -= 15;
+                enemyOnFire--;
+                addFloatingText("-15 🔥", enemy.x + 45, enemy.y, "#ffb86c");
+            }
+
+            // Ataque do Lobo
+            if (wolfTurns > 0) {
+                enemy.hp -= 15;
+                wolfTurns--;
+                addFloatingText("-15 🐺", enemy.x + 45, enemy.y - 15, "#ffb86c");
+            }
+
+            if (verificarFimDeJogo()) return;
+
+            // Fase Furioso (HP <= 125)
+            if (enemy.hp <= 125 && !ragedEnemy) {
+                ragedEnemy = true;
+                enemy.hp += 150;
+                enemy.maxHp += 75;
+                addFloatingText("FURIOSO! +150 HP", enemy.x + 45, enemy.y, "#ff2a6d");
+                setMessage("😡 O INIMIGO FICOU FURIOSO! Recuperou 150 HP e seu poder aumentou!", [{ label: "Continuar", action: fimDoTurno }]);
+                return;
+            }
+
+            if (skipEnemy) {
+                skipEnemy = false;
+                setMessage("💫 O inimigo está atordoado e não conseguiu agir!", [{ label: "Próximo Turno", action: fimDoTurno }]);
+                return;
+            }
+
+            // Escolhe alvo vivo
+            let alvo = (p1.hp > 0 && p2.hp > 0) ? (rand(1, 2) === 1 ? p1 : p2) : (p1.hp > 0 ? p1 : p2);
+            enemy.offsetX = -50;
+
+            let dano = ragedEnemy ? rand(12, 36) : rand(8, 28);
+            if (atkDebuff > 0) { dano = Math.max(2, dano - 7); atkDebuff--; }
+            if (enemyDistress > 0) { dano = Math.floor(dano / 2); enemyDistress--; }
+            if (defDebuff > 0) defDebuff--;
+
+            // Parry do P2
+            if (alvo === p2 && p2.parryActive) {
+                p2.parryActive = false;
+                enemy.hp -= dano;
+                addFloatingText(`PARRY! -${dano}`, enemy.x + 45, enemy.y, "#8be9fd");
+                setMessage(`🔰 ${p2.name} deu PARRY e refletiu ${dano} de dano no inimigo!`, [{ label: "Próximo Turno", action: fimDoTurno }]);
+                return;
+            }
+
+            // Reduções de defesa
+            dano = Math.max(1, dano - alvo.defBonus);
+            if (alvo.motivateDef) { dano = Math.floor(dano / 2); alvo.motivateDef = false; }
+
+            // Block do P1 protegendo P2
+            if (alvo === p2 && p1.block && p1.hp > 0) {
+                p1.block = false;
+                let metade = Math.floor(dano / 2);
+                p1.hp -= metade;
+                p2.hp -= (dano - metade);
+                addFloatingText(`-${metade}`, p1.x + 24, p1.y, "#ff5555");
+                addFloatingText(`-${dano - metade}`, p2.x + 24, p2.y, "#ff5555");
+                setMessage(`🛡️ ${p1.name} bloqueou parte do golpe! Ambos tomaram ${metade} de dano.`, [{ label: "Próximo Turno", action: fimDoTurno }]);
+                return;
+            }
+
+            // Efeitos elementais aleatórios do chefe
+            let tipoAtaque = rand(1, 3);
+            alvo.hp -= dano;
+            addFloatingText(`-${dano}`, alvo.x + 24, alvo.y, "#ff5555");
+
+            let msg = `👹 O inimigo atacou ${alvo.name} e causou ${dano} de dano!`;
+            if (tipoAtaque === 2 && rand(1, 3) === 3) {
+                alvo.fireTurns = 2;
+                msg += ` ${alvo.name} está queimando!`;
+            } else if (tipoAtaque === 3 && rand(1, 3) === 3) {
+                alvo.skip = true;
+                msg += ` ${alvo.name} foi congelado!`;
+            }
+
+            setMessage(msg, [{ label: "Próximo Turno", action: fimDoTurno }]);
+        }
+
+        function fimDoTurno() {
+            if (verificarFimDeJogo()) return;
+            turns++;
+            if (p1.ultUnlocked) p1.ultCharge = Math.min(100, p1.ultCharge + 10);
+            if (p2.ultUnlocked) p2.ultCharge = Math.min(100, p2.ultCharge + 10);
+            iniciarTurno();
+        }
+
+        function verificarFimDeJogo() {
+            if (enemy.hp <= 0) {
+                setMessage(`🎉 VITÓRIA! ${p1.name} e ${p2.name} derrotaram o chefe em ${turns} turnos!`, [
+                    { label: "Jogar Novamente", action: () => location.reload() }
+                ]);
+                return true;
+            }
+            if (p1.hp <= 0 && p2.hp <= 0) {
+                setMessage(`💀 DERROTA... Os heróis caíram no turno ${turns}.`, [
+                    { label: "Tentar Novamente", action: () => location.reload() }
+                ]);
+                return true;
+            }
+            return false;
+        }
+    </script>
+</body>
+</html>

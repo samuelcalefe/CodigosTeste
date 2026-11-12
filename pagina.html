@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>rinni's page</title>
+            
+    <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #272138; 
+                color: #ffffff;  
+                padding: 20px;
+                transition: background-color 0.5s ease, color 0.5s ease;
+            }
+            button {
+                background-color: #ffffff;
+                color: black
+            }
+            h1 {
+                font-family: 'Courier New', Courier, monospace;
+                color: #A085FF;
+            }
+            .ibput-box input {
+                font-family: inherit;
+                padding: 8px;
+            }
+            .ibput-box button {
+                font-family: Arial, sans-serif;
+                background-color: #ff5555;
+                color: rgb(134, 35, 35);
+                border: none;
+                padding: 10px;
+                cursor: pointer;
+            }
+            .ibput-box button:hover {
+            background-color: #461515;
+            }
+        </style>
+</head>
+<body>
+
+<div class="main">
+    <h1>hello, i'm rinni :P</h1>
+    <p>i'm a 15y artist and these are my hobbies:</p>
+</div>
+
+<div class="lists">
+    <ul>
+        <li>drawing</li>
+        <li>gaming</li>
+        <li>sleeping</li>
+    </ul>
+
+    <p>here are my favorite people in order:</p>
+
+    <ol>
+        <li>my brother</li>
+        <li>my cat</li>
+        <li>my best friend</li>
+    </ol>
+</div>
+
+<div class="links">
+    <p>my brother likes programming, check out his <a href="https://github.com/guesnty">github</a></p>
+    <p>also i made this drawig</p>
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmpRDpiQ5_W0cxIe19iT2YqRHj66sHG4t48ii48A8OijLadpLOx7s0jy4&s=10" alt="my drawign">
+</div>
+
+<div class="ibput-box">
+    <button onclick="deleteEverything()">big red "delete everything" button</button>
+    <input type="text" id="input" placeholder="what did you think">
+</div>
+<script>
+    function deleteEverything() {
+        let texto = document.getElementById("input").value;
+
+        if (texto === "") {
+            alert("You didn't write anything to delete!");
+        } else {
+            alert("Deleting: " + texto);
+            document.getElementById("input").value = "";
+        }
+    }
+</script>
+<div class="color">
+    <button id="colorChange" onclick="changeColor()">change color</button>
+</div>
+<script>
+    function changeColor() {
+        let fundoAtual = document.body.style.backgroundColor;
+            if (fundoAtual === "white") {
+                document.body.style.backgroundColor = "#272138";
+                document.body.style.color = "#ffffff";
+            } 
+            else {
+                document.body.style.backgroundColor = "white";
+                document.body.style.color = "black";
+            }
+}
+</script>
+</body>
+</html>
